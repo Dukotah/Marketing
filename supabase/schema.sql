@@ -173,3 +173,20 @@ create index on campaigns(organization_id);
 create index on ai_conversations(organization_id);
 create index on ai_messages(conversation_id);
 create index on channel_connections(organization_id);
+
+-- Email Subscribers
+create table if not exists email_subscribers (
+  id uuid primary key default uuid_generate_v4(),
+  organization_id uuid references organizations(id) on delete cascade not null,
+  email text not null,
+  name text,
+  tags text[] default '{}',
+  is_active boolean not null default true,
+  subscribed_at timestamptz not null default now(),
+  unsubscribed_at timestamptz,
+  unique(organization_id, email)
+);
+alter table email_subscribers enable row level security;
+create policy "Users access their subscribers" on email_subscribers
+  for all using (organization_id in (select id from organizations where owner_id = auth.uid()));
+create index on email_subscribers(organization_id);
