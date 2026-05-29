@@ -14,6 +14,7 @@ import {
   ChevronRight,
   LogOut,
   Users,
+  LayoutTemplate,
 } from "lucide-react";
 import { useState } from "react";
 import { cn, getInitials } from "@/lib/utils";
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/ai-assistant", label: "AI Assistant", icon: Bot },
   { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
+  { href: "/dashboard/campaigns/templates", label: "Templates", icon: LayoutTemplate },
   { href: "/dashboard/subscribers", label: "Subscribers", icon: Users },
   { href: "/dashboard/channels", label: "Channels", icon: Plug },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
