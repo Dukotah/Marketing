@@ -1,7 +1,8 @@
 import * as SecureStore from "expo-secure-store";
 
+// Set EXPO_PUBLIC_API_URL in your EAS build secrets to your Vercel deployment URL
 const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL || "https://app.launchpad.ai";
+  process.env.EXPO_PUBLIC_API_URL || "https://your-app.vercel.app";
 
 async function getAuthToken(): Promise<string | null> {
   return SecureStore.getItemAsync("auth_token");
