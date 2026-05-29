@@ -22,13 +22,23 @@ const STARTER_PROMPTS = [
 
 interface ChatWindowProps {
   initialPrompt?: string;
+  conversationId?: string;
+  onConversationCreated?: (id: string, title: string) => void;
 }
 
-export function ChatWindow({ initialPrompt }: ChatWindowProps) {
+export function ChatWindow({
+  initialPrompt,
+  conversationId: initialConversationId,
+  onConversationCreated,
+}: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState(initialPrompt || "");
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
+  const [conversationId, setConversationId] = useState<string | null>(
+    initialConversationId ?? null
+  );
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -50,6 +60,60 @@ export function ChatWindow({ initialPrompt }: ChatWindowProps) {
     }
   }, [input]);
 
+  // Load history when conversationId changes
+  useEffect(() => {
+    const id = initialConversationId ?? null;
+    setConversationId(id);
+    if (!id) {
+      setMessages([]);
+      return;
+    }
+    setIsLoadingHistory(true);
+    fetch(`/api/conversations/${id}/messages`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.messages) {
+          setMessages(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            data.messages.map((m: any) => ({
+              id: m.id,
+              role: m.role as "user" | "assistant",
+              content: m.content,
+            }))
+          );
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsLoadingHistory(false));
+  }, [initialConversationId]);
+
+  async function ensureConversation(firstUserMessage: string): Promise<string> {
+    if (conversationId) return conversationId;
+    // Create a new conversation, title derived from first message
+    const title =
+      firstUserMessage.length > 60
+        ? firstUserMessage.slice(0, 57) + "..."
+        : firstUserMessage;
+    const res = await fetch("/api/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    });
+    const data = await res.json();
+    const id = data.conversation?.id as string;
+    setConversationId(id);
+    onConversationCreated?.(id, title);
+    return id;
+  }
+
+  async function saveMessage(convId: string, role: "user" | "assistant", content: string) {
+    await fetch(`/api/conversations/${convId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role, content }),
+    }).catch(() => {});
+  }
+
   async function sendMessage(content?: string) {
     const messageContent = content || input.trim();
     if (!messageContent || isLoading) return;
@@ -70,6 +134,10 @@ export function ChatWindow({ initialPrompt }: ChatWindowProps) {
     abortControllerRef.current = new AbortController();
 
     try {
+      // Create (or reuse) conversation before calling AI
+      const convId = await ensureConversation(messageContent);
+      await saveMessage(convId, "user", messageContent);
+
       const response = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -105,8 +173,12 @@ export function ChatWindow({ initialPrompt }: ChatWindowProps) {
 
               try {
                 const parsed = JSON.parse(data);
-                if (parsed.type === "content_block_delta" && parsed.delta?.text) {
-                  fullContent += parsed.delta.text;
+                // Support both SSE formats: { text } and { type, delta }
+                const text =
+                  parsed.text ??
+                  (parsed.type === "content_block_delta" ? parsed.delta?.text : undefined);
+                if (text) {
+                  fullContent += text;
                   setStreamingContent(fullContent);
                 }
               } catch {
@@ -117,15 +189,16 @@ export function ChatWindow({ initialPrompt }: ChatWindowProps) {
         }
       }
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: fullContent,
-        },
-      ]);
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: fullContent,
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
       setStreamingContent("");
+
+      // Persist assistant message
+      await saveMessage(convId, "assistant", fullContent);
     } catch (error: unknown) {
       if (error instanceof Error && error.name !== "AbortError") {
         setMessages((prev) => [
@@ -158,9 +231,10 @@ export function ChatWindow({ initialPrompt }: ChatWindowProps) {
     setMessages([]);
     setStreamingContent("");
     setIsLoading(false);
+    setConversationId(null);
   }
 
-  const isEmpty = messages.length === 0 && !isLoading;
+  const isEmpty = messages.length === 0 && !isLoading && !isLoadingHistory;
 
   return (
     <div className="flex flex-col h-full bg-[#0a0a0a] rounded-2xl border border-white/5 overflow-hidden">
@@ -191,7 +265,11 @@ export function ChatWindow({ initialPrompt }: ChatWindowProps) {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {isEmpty ? (
+        {isLoadingHistory ? (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-white/30 text-sm">Loading conversation...</p>
+          </div>
+        ) : isEmpty ? (
           <div className="flex flex-col items-center justify-center h-full text-center pb-8">
             <div className="w-16 h-16 bg-blue-500/10 rounded-2xl flex items-center justify-center mb-5">
               <Sparkles className="w-8 h-8 text-blue-400" />

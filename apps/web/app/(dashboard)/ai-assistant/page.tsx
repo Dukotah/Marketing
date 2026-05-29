@@ -1,4 +1,4 @@
-import { ChatWindow } from "@/components/ai/ChatWindow";
+import { ConversationsSidebar } from "@/components/ai/ConversationsSidebar";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -6,16 +6,20 @@ export const metadata: Metadata = {
 };
 
 interface PageProps {
-  searchParams: Promise<{ prompt?: string }>;
+  searchParams: Promise<{ prompt?: string; conversation?: string }>;
 }
 
 export default async function AIAssistantPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const initialPrompt = params.prompt;
+  const conversationId = params.conversation;
 
   return (
-    <div className="h-[calc(100vh-8rem)] max-w-4xl mx-auto">
-      <ChatWindow initialPrompt={initialPrompt} />
+    <div className="h-[calc(100vh-8rem)] flex gap-4">
+      <ConversationsSidebar
+        activeConversationId={conversationId}
+        initialPrompt={initialPrompt}
+      />
     </div>
   );
 }
