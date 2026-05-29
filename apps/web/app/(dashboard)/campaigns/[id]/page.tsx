@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { DeleteCampaignButton } from "@/components/campaigns/DeleteCampaignButton";
+import { SendEmailButton } from "@/components/campaigns/SendEmailButton";
 import type { Metadata } from "next";
 
 interface PageProps {
@@ -263,6 +264,14 @@ export default async function CampaignDetailPage({ params }: PageProps) {
             <h2 className="text-sm font-semibold text-white/60 mb-3">Actions</h2>
             <div className="space-y-2">
               <CampaignActions campaignId={c.id} status={c.status} />
+              {c.channels.includes("EMAIL") && (
+                <SendEmailButton
+                  campaignId={c.id}
+                  campaignName={c.name}
+                  subject={c.content?.subject || c.name}
+                  fromAddress={process.env.RESEND_FROM_EMAIL || "campaigns@launchpad.app"}
+                />
+              )}
               <Link
                 href={`/dashboard/ai-assistant?prompt=Help+me+optimize+my+campaign+${encodeURIComponent(c.name)}`}
                 className="block w-full text-center bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 text-sm font-medium py-2.5 rounded-xl transition-colors"

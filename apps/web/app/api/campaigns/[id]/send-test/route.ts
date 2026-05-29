@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { sendCampaignEmail } from "@/lib/resend";
-import { MarketingChannel, CampaignStatus } from "@launchpad/shared";
+import { sendTestEmail } from "@/lib/resend";
+import { MarketingChannel } from "@launchpad/shared";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-export async function POST(_req: NextRequest, { params }: RouteParams) {
+export async function POST(req: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     const supabase = await createClient();
@@ -20,10 +20,15 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get org
+    const body = await req.json();
+    const { testEmail } = body;
+    if (!testEmail) {
+      return NextResponse.json({ error: "testEmail is required" }, { status: 400 });
+    }
+
     const { data: org } = await supabase
       .from("organizations")
-      .select("id, subscription_tier, name")
+      .select("id, name")
       .eq("owner_id", user.id)
       .single();
 
@@ -31,7 +36,6 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Organization not found" }, { status: 404 });
     }
 
-    // Fetch the campaign and verify ownership
     const { data: campaign } = await supabase
       .from("campaigns")
       .select("*")
@@ -43,44 +47,6 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
     }
 
-    // Check EMAIL is in channels
-    if (!campaign.channels?.includes(MarketingChannel.EMAIL)) {
-      return NextResponse.json(
-        { error: "This campaign does not have an EMAIL channel configured." },
-        { status: 400 }
-      );
-    }
-
-    // Fetch active subscribers
-    const { data: subscribers, error: subError } = await supabase
-      .from("email_subscribers")
-      .select("email, name")
-      .eq("organization_id", org.id)
-      .eq("is_active", true);
-
-    if (subError) {
-      return NextResponse.json({ error: subError.message }, { status: 500 });
-    }
-
-    if (!subscribers || subscribers.length === 0) {
-      return NextResponse.json(
-        { error: "No subscribers yet. Add subscribers first." },
-        { status: 400 }
-      );
-    }
-
-    // Block free tier
-    if (!org.subscription_tier || org.subscription_tier === "FREE") {
-      return NextResponse.json(
-        {
-          error: "Upgrade to send email campaigns",
-          upgrade: true,
-        },
-        { status: 403 }
-      );
-    }
-
-    // Fetch email channel connection for fromName/fromEmail
     const { data: channelConnection } = await supabase
       .from("channel_connections")
       .select("metadata")
@@ -96,9 +62,10 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
       process.env.RESEND_FROM_EMAIL ||
       "campaigns@launchpad.app";
 
-    const subject = campaign.content?.subject || campaign.name;
+    const subject = `[TEST] ${campaign.content?.subject || campaign.name}`;
     const html =
       `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">` +
+      `<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;margin-bottom:20px;font-size:12px;color:#92400e">This is a test email preview.</div>` +
       (campaign.content?.headline
         ? `<h1 style="font-size:24px">${campaign.content.headline}</h1>`
         : "") +
@@ -110,34 +77,11 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
       `<p style="font-size:12px;color:#9ca3af">Sent by ${org.name} via Launchpad</p>` +
       `</div>`;
 
-    const toAddresses = subscribers.map((s: { email: string }) => s.email);
+    await sendTestEmail(testEmail, subject, html, fromName, fromEmail);
 
-    await sendCampaignEmail(toAddresses, subject, html, fromName, fromEmail);
-
-    // Update campaign metrics jsonb and status
-    const existingMetrics = campaign.metrics || {};
-    const updatedMetrics = {
-      ...existingMetrics,
-      emailsSent: toAddresses.length,
-      lastSentAt: new Date().toISOString(),
-    };
-
-    await supabase
-      .from("campaigns")
-      .update({
-        status: CampaignStatus.ACTIVE,
-        metrics: updatedMetrics,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id);
-
-    return NextResponse.json({
-      success: true,
-      sent: toAddresses.length,
-      campaignId: id,
-    });
+    return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Campaign send error:", error);
+    console.error("Test email error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
