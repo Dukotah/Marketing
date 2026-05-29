@@ -15,6 +15,7 @@ import {
   Edit,
 } from "lucide-react";
 import Link from "next/link";
+import { DeleteCampaignButton } from "@/components/campaigns/DeleteCampaignButton";
 import type { Metadata } from "next";
 
 interface PageProps {
@@ -269,6 +270,12 @@ export default async function CampaignDetailPage({ params }: PageProps) {
                 Ask Max to optimize
               </Link>
             </div>
+          </div>
+
+          {/* Danger Zone */}
+          <div className="bg-[#111111] border border-red-500/10 rounded-2xl p-5">
+            <h2 className="text-sm font-semibold text-red-400/60 mb-3">Danger Zone</h2>
+            <DeleteCampaignButton campaignId={c.id} campaignName={c.name} />
           </div>
         </div>
       </div>

@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useState } from "react";
 import { router } from "expo-router";
+import { saveAuthToken } from "@/lib/api";
 
 export default function SignupScreen() {
   const [formData, setFormData] = useState({
@@ -58,6 +59,13 @@ export default function SignupScreen() {
 
       if (data.error) {
         setError(data.msg || data.error);
+        return;
+      }
+
+      // If Supabase returns a session immediately (no email confirm required), go straight to tabs
+      if (data.access_token) {
+        await saveAuthToken(data.access_token);
+        router.replace("/(tabs)");
         return;
       }
 
