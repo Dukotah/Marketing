@@ -139,6 +139,35 @@ begin
 end;
 $$ language plpgsql security definer;
 
+-- Channel Waitlist
+create table if not exists channel_waitlist (
+  id uuid primary key default uuid_generate_v4(),
+  organization_id uuid references organizations(id) on delete cascade not null,
+  channel text not null,
+  email text not null,
+  created_at timestamptz not null default now(),
+  unique(organization_id, channel)
+);
+alter table channel_waitlist enable row level security;
+create policy "Users access their waitlist entries" on channel_waitlist
+  for all using (organization_id in (select id from organizations where owner_id = auth.uid()));
+
+-- Notifications
+create table if not exists notifications (
+  id uuid primary key default uuid_generate_v4(),
+  organization_id uuid references organizations(id) on delete cascade not null,
+  title text not null,
+  body text,
+  type text not null default 'info' check (type in ('info','success','warning','error')),
+  link text,
+  is_read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+alter table notifications enable row level security;
+create policy "Users access their notifications" on notifications
+  for all using (organization_id in (select id from organizations where owner_id = auth.uid()));
+create index on notifications(organization_id, is_read);
+
 -- Indexes
 create index on campaigns(organization_id);
 create index on ai_conversations(organization_id);
