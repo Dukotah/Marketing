@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { MetricsCards } from "@/components/dashboard/MetricsCards";
 import { Bot, Megaphone, ArrowRight, Plus, TrendingUp } from "lucide-react";
 import Link from "next/link";
+import { CampaignStatus } from "@launchpad/shared";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -13,6 +14,33 @@ export default async function DashboardPage() {
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
+  // Fetch real data
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("id")
+    .eq("owner_id", user?.id ?? "")
+    .single();
+
+  const orgId = org?.id ?? null;
+
+  const [{ data: recentCampaigns }, { data: activeCampaigns }] = await Promise.all([
+    orgId
+      ? supabase
+          .from("campaigns")
+          .select("id, name, status, channels, budget")
+          .eq("organization_id", orgId)
+          .order("created_at", { ascending: false })
+          .limit(5)
+      : Promise.resolve({ data: [] }),
+    orgId
+      ? supabase
+          .from("campaigns")
+          .select("id, budget")
+          .eq("organization_id", orgId)
+          .eq("status", CampaignStatus.ACTIVE)
+      : Promise.resolve({ data: [] }),
+  ]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -56,54 +84,44 @@ export default async function DashboardPage() {
           </div>
 
           <div className="space-y-3">
-            {[
-              {
-                name: "Summer Email Blast",
-                status: "ACTIVE",
-                channels: ["Email"],
-                reach: "12.4K",
-                ctr: "3.2%",
-              },
-              {
-                name: "Facebook Brand Awareness",
-                status: "ACTIVE",
-                channels: ["Facebook"],
-                reach: "28.1K",
-                ctr: "1.8%",
-              },
-              {
-                name: "Google Search — Local",
-                status: "PAUSED",
-                channels: ["Google Ads"],
-                reach: "8.7K",
-                ctr: "4.1%",
-              },
-            ].map((campaign) => (
-              <div
-                key={campaign.name}
-                className="flex items-center justify-between p-3 bg-[#1a1a1a] rounded-xl border border-white/5 hover:border-white/10 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                      campaign.status === "ACTIVE"
-                        ? "bg-green-400"
-                        : "bg-yellow-400"
-                    }`}
-                  />
-                  <div>
-                    <p className="text-sm font-medium">{campaign.name}</p>
-                    <p className="text-xs text-white/30">
-                      {campaign.channels.join(", ")}
+            {recentCampaigns && recentCampaigns.length > 0 ? (
+              recentCampaigns.map((campaign) => (
+                <Link
+                  key={campaign.id}
+                  href={`/dashboard/campaigns/${campaign.id}`}
+                  className="flex items-center justify-between p-3 bg-[#1a1a1a] rounded-xl border border-white/5 hover:border-white/10 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                        campaign.status === CampaignStatus.ACTIVE
+                          ? "bg-green-400"
+                          : campaign.status === CampaignStatus.PAUSED
+                          ? "bg-yellow-400"
+                          : campaign.status === CampaignStatus.DRAFT
+                          ? "bg-white/30"
+                          : "bg-blue-400"
+                      }`}
+                    />
+                    <div>
+                      <p className="text-sm font-medium">{campaign.name}</p>
+                      <p className="text-xs text-white/30">
+                        {campaign.channels.join(", ") || "No channels"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-medium px-2 py-0.5 rounded-md bg-white/5 text-white/50">
+                      {campaign.status}
                     </p>
                   </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium">{campaign.reach}</p>
-                  <p className="text-xs text-white/30">{campaign.ctr} CTR</p>
-                </div>
-              </div>
-            ))}
+                </Link>
+              ))
+            ) : (
+              <p className="text-sm text-white/30 text-center py-6">
+                No campaigns yet. Create your first one!
+              </p>
+            )}
           </div>
 
           <Link
@@ -169,22 +187,11 @@ export default async function DashboardPage() {
         <p className="text-sm text-white/40 mb-6">
           Revenue and conversions over the last 30 days
         </p>
-        <div className="h-40 flex items-end gap-1.5">
-          {/* Simple bar chart visualization */}
-          {[40, 55, 45, 65, 70, 58, 72, 68, 80, 75, 85, 78, 90, 82, 88, 76, 92, 85, 95, 88, 100, 92, 98, 85, 90, 95, 88, 92, 96, 100].map(
-            (height, i) => (
-              <div
-                key={i}
-                className="flex-1 bg-blue-500/30 hover:bg-blue-500/50 rounded-t transition-colors"
-                style={{ height: `${height}%` }}
-              />
-            )
-          )}
-        </div>
-        <div className="flex justify-between text-xs text-white/20 mt-2">
-          <span>Jun 1</span>
-          <span>Jun 15</span>
-          <span>Jun 30</span>
+        {/* Performance chart coming soon — requires channel API integrations */}
+        <div className="h-40 flex flex-col items-center justify-center gap-2 border border-dashed border-white/10 rounded-xl">
+          <TrendingUp className="w-8 h-8 text-white/20" />
+          <p className="text-sm text-white/30">Performance chart coming soon</p>
+          <p className="text-xs text-white/20">Connect your channels to see real data</p>
         </div>
       </div>
     </div>
