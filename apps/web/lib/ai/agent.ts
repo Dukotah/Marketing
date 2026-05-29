@@ -1,9 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { AIMessage, AIMessageRole } from "@launchpad/shared";
 
-export const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-});
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY!);
 
 export const MAX_SYSTEM_PROMPT = `You are Max, an expert AI marketing strategist and the core intelligence behind Launchpad — an AI-powered digital marketing platform for small and medium businesses.
 
@@ -80,48 +78,42 @@ export interface StreamChatOptions {
     industry?: string;
     website?: string;
   };
-  onToken?: (token: string) => void;
 }
 
-export async function streamChatResponse({
-  messages,
-  organizationContext,
-}: StreamChatOptions) {
-  const systemPrompt = organizationContext
-    ? `${MAX_SYSTEM_PROMPT}
-
-## Organization Context
-- Business Name: ${organizationContext.name || "Unknown"}
-- Industry: ${organizationContext.industry || "Unknown"}
-- Website: ${organizationContext.website || "Not provided"}`
-    : MAX_SYSTEM_PROMPT;
-
-  const formattedMessages = messages
-    .filter((m) => m.role !== AIMessageRole.SYSTEM)
-    .map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content,
-    }));
-
-  const stream = anthropic.messages.stream({
-    model: "claude-opus-4-5",
-    max_tokens: 4096,
-    system: systemPrompt,
-    messages: formattedMessages,
+export async function streamChatResponse({ messages, organizationContext }: StreamChatOptions) {
+  const model = genAI.getGenerativeModel({
+    model: "gemini-1.5-flash",
+    systemInstruction: organizationContext
+      ? `${MAX_SYSTEM_PROMPT}\n\n## Organization Context\n- Business Name: ${organizationContext.name || "Unknown"}\n- Industry: ${organizationContext.industry || "Unknown"}\n- Website: ${organizationContext.website || "Not provided"}`
+      : MAX_SYSTEM_PROMPT,
+    safetySettings: [
+      { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+      { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+    ],
   });
 
-  return stream;
+  // Separate the last user message from history
+  const history = messages
+    .filter((m) => m.role !== AIMessageRole.SYSTEM)
+    .slice(0, -1)
+    .map((m) => ({
+      role: m.role === AIMessageRole.USER ? "user" : "model",
+      parts: [{ text: m.content }],
+    }));
+
+  const lastMessage = messages.filter((m) => m.role !== AIMessageRole.SYSTEM).at(-1);
+
+  const chat = model.startChat({ history });
+  const result = await chat.sendMessageStream(lastMessage?.content ?? "");
+  return result.stream;
 }
 
 export function extractCampaignData(content: string): Record<string, unknown> | null {
   const jsonMatch = content.match(/```json\n([\s\S]*?)\n```/);
   if (!jsonMatch) return null;
-
   try {
     const parsed = JSON.parse(jsonMatch[1]);
-    if (parsed.campaign_ready) {
-      return parsed;
-    }
+    if (parsed.campaign_ready) return parsed;
     return null;
   } catch {
     return null;

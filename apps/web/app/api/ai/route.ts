@@ -85,14 +85,16 @@ export async function POST(req: NextRequest) {
       .eq("owner_id", user.id)
       .then(() => {});
 
-    // Stream the response using SSE
+    // Stream Gemini response using SSE — each chunk is plain text
     const encoder = new TextEncoder();
     const readable = new ReadableStream({
       async start(controller) {
         try {
-          for await (const event of stream) {
-            const data = JSON.stringify(event);
-            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          for await (const chunk of stream) {
+            const text = chunk.text();
+            if (text) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text })}\n\n`));
+            }
           }
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
