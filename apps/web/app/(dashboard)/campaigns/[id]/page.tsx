@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { Campaign, CampaignStatus } from "@launchpad/shared";
 import { ChannelBadge } from "@/components/campaigns/ChannelBadge";
+import { CampaignActions } from "@/components/campaigns/CampaignActions";
 import { formatCurrency, relativeTime } from "@/lib/utils";
 import {
   ArrowLeft,
@@ -260,21 +261,7 @@ export default async function CampaignDetailPage({ params }: PageProps) {
           <div className="bg-[#111111] border border-white/5 rounded-2xl p-5">
             <h2 className="text-sm font-semibold text-white/60 mb-3">Actions</h2>
             <div className="space-y-2">
-              {c.status === CampaignStatus.DRAFT && (
-                <button className="w-full bg-green-500 hover:bg-green-600 text-white text-sm font-medium py-2.5 rounded-xl transition-colors">
-                  Launch Campaign
-                </button>
-              )}
-              {c.status === CampaignStatus.ACTIVE && (
-                <button className="w-full bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 text-sm font-medium py-2.5 rounded-xl transition-colors">
-                  Pause Campaign
-                </button>
-              )}
-              {c.status === CampaignStatus.PAUSED && (
-                <button className="w-full bg-green-500 hover:bg-green-600 text-white text-sm font-medium py-2.5 rounded-xl transition-colors">
-                  Resume Campaign
-                </button>
-              )}
+              <CampaignActions campaignId={c.id} status={c.status} />
               <Link
                 href={`/dashboard/ai-assistant?prompt=Help+me+optimize+my+campaign+${encodeURIComponent(c.name)}`}
                 className="block w-full text-center bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 text-sm font-medium py-2.5 rounded-xl transition-colors"
